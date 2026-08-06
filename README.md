@@ -1,5 +1,9 @@
 # Claude Stats — Dynamic Island for Claude Code
 
+<p align="center">
+  <img src="docs/hero.gif" width="620" alt="The pixel-art Claude character strolling upside-down along the underside of the MacBook notch, between the live token count and cost figures" />
+</p>
+
 A macOS menu bar app that turns your MacBook's notch into a **Dynamic Island for [Claude Code](https://claude.com/claude-code)**: live token and cost figures hugging the camera housing, per-project scoping, and an animated pixel-art Claude character that strolls around the notch — and parks upside-down beneath it when a session needs you.
 
 Everything is parsed locally from the JSONL transcripts Claude Code already writes to `~/.claude/projects`. No network calls, no telemetry, nothing leaves your machine.
@@ -108,3 +112,7 @@ The personality knobs are single constants:
 | Roam cadence | `IslandView.roamOffset` (`16 s` period) |
 | Finished-turn quiet gate & lifetime | `AttentionDetector` (`turnQuietSeconds`, `turnStaleAfterMinutes`) |
 | Question-nudge lifetime | `AttentionDetector.staleAfterMinutes` |
+
+## License
+
+[MIT](LICENSE)
