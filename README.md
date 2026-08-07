@@ -47,11 +47,34 @@ The island knows a session is waiting on you by reading only the **tail** of eac
 - A notched MacBook for the island itself — on other displays the status item carries everything
 - Claude Code writing transcripts to `~/.claude/projects` (the default)
 
+## Install
+
+### From source (recommended)
+
+Builds locally — no Gatekeeper friction — installs to `/Applications`, launches, and registers itself to open at login:
+
+```sh
+git clone https://github.com/Ziadabdelsalam/claude-stats-dynamic-island.git
+cd claude-stats-dynamic-island
+bash scripts/install.sh
+```
+
+Toggle the login item any time: right-click the menu bar figure → **Launch at Login**.
+
+### Prebuilt app
+
+Grab `ClaudeStats.app.zip` from [Releases](https://github.com/Ziadabdelsalam/claude-stats-dynamic-island/releases) (Apple Silicon), unzip, move to `/Applications`, then clear the quarantine flag once (the app is ad-hoc signed, not notarized):
+
+```sh
+xattr -cr /Applications/ClaudeStats.app
+open /Applications/ClaudeStats.app
+```
+
 ## Build & run
 
 ```sh
 swift build
-swift test          # 91 tests
+swift test          # 94 tests
 
 # Menu bar app, debug:
 swift run ClaudeStatsApp

@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import ClaudeStatsCore
 
 /// Owns the app's long-lived pieces of state: the `UsageStore` (T5 — off-main parsing
@@ -19,5 +20,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         islandController = IslandController(store: store)
         attentionChime = AttentionChime(store: store)
         store.start()
+        enableLaunchAtLoginOnFirstRun()
+    }
+
+    /// One-time opt-in to "open at login" so the island is simply there after a reboot —
+    /// the toggle in the status item's right-click menu remains the user's override.
+    /// Guarded to real .app runs: registering a bare `swift run` debug binary as a login
+    /// item would enshrine a build-directory path in launchd.
+    private func enableLaunchAtLoginOnFirstRun() {
+        let key = "didAutoEnableLaunchAtLogin"
+        guard Bundle.main.bundlePath.hasSuffix(".app"),
+              !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        try? SMAppService.mainApp.register()
     }
 }

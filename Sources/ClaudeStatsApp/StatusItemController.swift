@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 import Observation
 import ClaudeStatsCore
@@ -105,6 +106,13 @@ final class StatusItemController: NSObject {
         let menu = NSMenu()
         let refresh = menu.addItem(withTitle: "Refresh", action: #selector(refreshTapped), keyEquivalent: "r")
         refresh.target = self
+        // Only meaningful (and only functional) when running from a real .app bundle;
+        // a bare debug binary would register its build path as a login item.
+        if Bundle.main.bundlePath.hasSuffix(".app") {
+            let launch = menu.addItem(withTitle: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+            launch.target = self
+            launch.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        }
         menu.addItem(.separator())
         let quit = menu.addItem(withTitle: "Quit", action: #selector(quitTapped), keyEquivalent: "q")
         quit.target = self
@@ -113,6 +121,19 @@ final class StatusItemController: NSObject {
 
     @objc private func refreshTapped() {
         store.refresh()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            NSLog("Launch-at-login toggle failed: \(error)")
+        }
     }
 
     @objc private func quitTapped() {
