@@ -126,7 +126,7 @@ Design notes:
 
 ## Privacy
 
-The app reads files under `~/.claude/projects` (or `--root`), aggregates them in memory, and displays the result. Its only network request is the Limits tab's fetch of `https://api.anthropic.com/api/oauth/usage`, authenticated with your locally stored Claude Code token (read from the `Claude Code-credentials` Keychain item, `~/.claude/.credentials.json` as fallback — macOS may ask once to allow Keychain access). Nothing else ever leaves your machine.
+The app reads files under `~/.claude/projects` (or `--root`), aggregates them in memory, and displays the result. Its only network request is the Limits tab's fetch of `https://api.anthropic.com/api/oauth/usage`, authenticated with your locally stored Claude Code token (read once per launch via the system `security` tool from the `Claude Code-credentials` Keychain item, then cached in memory until it expires; `~/.claude/.credentials.json` as fallback). The token is never modified, and nothing else ever leaves your machine.
 
 ## Tuning
 
