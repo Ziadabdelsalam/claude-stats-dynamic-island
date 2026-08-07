@@ -301,8 +301,7 @@ struct IslandView: View {
         // horizontal POSITION, not walk progress — the character ducks under the bar right at
         // the notch's left corner and stays outside from there, never cutting through the
         // menu bar / notch interior on its way to (or from) the parked spot.
-        let dipStart = Self.wingWidth - 34
-        func walkPose(dx: CGFloat, hopY: Double) -> (CGSize, CGFloat) {
+        func walkPose(dx: CGFloat, hopY: Double, dipStart: CGFloat) -> (CGSize, CGFloat) {
             let dip = Self.smoothstep((dx - dipStart) / 18)
             let dy = parkedDY * dip + hopY * (1 - 2 * dip)
             return (CGSize(width: dx, height: dy), Self.flip(dip))
@@ -313,17 +312,18 @@ struct IslandView: View {
             guard let nudgeChangedAt else { return (CGSize(width: centerDX, height: parkedDY), true, -1) }
             let p = min(1, now.timeIntervalSince(nudgeChangedAt) / legDuration)
             let (x, y) = Self.leg(p, hopCount: 4)
-            let (offset, flip) = walkPose(dx: centerDX * x, hopY: y)
+            let (offset, flip) = walkPose(dx: centerDX * x, hopY: y, dipStart: Self.outboundDipStart)
             return (offset, p >= 1, flip)
         }
         if let nudgeChangedAt {
-            // Nudge just cleared: the same hops homeward, righting itself as it rounds the
-            // notch's corner back into the wing.
+            // Nudge just cleared: the same hops homeward — but along the underside the whole
+            // way to the far left, only climbing up into the home slot at the very end
+            // (`homewardDipStart`), never resurfacing early to walk inside the wing.
             let elapsed = now.timeIntervalSince(nudgeChangedAt)
             if elapsed < legDuration {
                 let p = elapsed / legDuration
                 let (x, y) = Self.leg(p, hopCount: 4)
-                let (offset, flip) = walkPose(dx: centerDX * (1 - x), hopY: y)
+                let (offset, flip) = walkPose(dx: centerDX * (1 - x), hopY: y, dipStart: Self.homewardDipStart)
                 return (offset, false, flip)
             }
         }
@@ -342,11 +342,17 @@ struct IslandView: View {
         let roam = Self.roamOffset(
             t: t,
             travel: notchWidth + 2 * Self.wingWidth - 2 * Self.characterInset - 24,
-            dipStart: Self.wingWidth - 34,
             dipDepth: parkedDY
         )
         return (roam.offset, false, roam.flip)
     }
+
+    /// Where the underside dip begins, by direction of travel. Heading right the character
+    /// walks the home wing indoors and ducks under at the notch's left corner; heading home
+    /// it keeps to the underside for the whole bar and only climbs up into its slot at the
+    /// far-left end — it never resurfaces early to walk inside the wing.
+    private static let outboundDipStart: CGFloat = wingWidth - 34
+    private static let homewardDipStart: CGFloat = 2
 
     /// Maps flip progress 0...1 onto a y-scale of 1...-1, clamped away from the exactly-flat
     /// zero crossing (a singular transform SwiftUI won't render).
@@ -380,12 +386,13 @@ struct IslandView: View {
     /// of the way — under the housing AND under the money section, never inside it — to the
     /// bar's far end, a beat there, then the same trip home.
     private static func roamOffset(
-        t: Double, travel: CGFloat, dipStart: CGFloat, dipDepth: CGFloat
+        t: Double, travel: CGFloat, dipDepth: CGFloat
     ) -> (offset: CGSize, flip: CGFloat) {
         let period = 16.0
         let phase = t.truncatingRemainder(dividingBy: period)
 
         let progressAndHop: (x: Double, y: Double)
+        var homeward = false
         switch phase {
         case ..<9.0:
             progressAndHop = (0, 0)
@@ -393,18 +400,20 @@ struct IslandView: View {
             progressAndHop = leg((phase - 9.0) / 2.4, hopCount: 4)
         case ..<12.6:  // a beat hanging off the bar's far end
             progressAndHop = (1, 0)
-        case ..<15.0:  // home: the same trip back to the token figure
+        case ..<15.0:  // home: the same trip back, underside the whole way
             let (x, y) = leg((phase - 12.6) / 2.4, hopCount: 4)
             progressAndHop = (1 - x, y)
+            homeward = true
         default:
             progressAndHop = (0, 0)
         }
 
         let dx = travel * progressAndHop.x
-        // 0 in the home wing -> 1 from the notch's left corner onward: once it leaves home
-        // it stays on the underside for the whole rest of the bar (the money side is walked
-        // outside only).
-        let dip = smoothstep((dx - dipStart) / 18)
+        // Outbound, 0 in the home wing -> 1 from the notch's left corner onward: once it
+        // leaves home it stays on the underside for the whole rest of the bar (the money side
+        // is walked outside only). Homeward the dip holds all the way to the far left, so the
+        // character climbs up into its slot at the end instead of resurfacing at the corner.
+        let dip = smoothstep((dx - (homeward ? homewardDipStart : outboundDipStart)) / 18)
         // Hops flip with the character: upside down on the notch's underside, a hop moves
         // AWAY from the edge it stands on, not into the housing.
         let dy = dipDepth * dip + progressAndHop.y * (1 - 2 * dip)
