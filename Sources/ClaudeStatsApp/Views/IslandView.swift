@@ -83,7 +83,11 @@ struct IslandView: View {
     private func attentionCaption(for attention: AttentionState) -> String {
         let name = store.snapshot?.scopedByProject[attention.projectKey]?.displayName
             ?? attention.projectKey
-        var text = "\(name) · \(attention.prompt ?? "needs you")"
+        // The bubble renders `fixedSize` (it must not stretch the layout it overlays), so the
+        // string itself is the width limit — keep it comfortably inside the island's window.
+        let prompt = attention.prompt ?? "needs you"
+        let clippedPrompt = prompt.count > 36 ? prompt.prefix(36) + "…" : prompt[...]
+        var text = "\(String(name.prefix(24))) · \(clippedPrompt)"
         let all = store.pendingAttention
         if all.count > 1, let index = all.firstIndex(where: { $0.id == attention.id }) {
             text += " · \(index + 1)/\(all.count)"
@@ -232,20 +236,23 @@ struct IslandView: View {
                     // bottom edge, standing on it like a ceiling. The flip runs through the
                     // descent, so it somersaults into place (and back on the way home).
                     .scaleEffect(x: 1, y: motion.flip)
+            }
+            // The beacon's name tag: which project (and question) is asking, hanging just
+            // below the parked character so there's no hunting through sessions. Cycles with
+            // `displayedAttention`, and shares its target with the taps. An OVERLAY, not a
+            // ZStack child: overlays don't participate in layout, so the wide caption can't
+            // inflate the stack and drag the 24pt character off its notch-centered anchor.
+            .overlay {
                 if motion.ripple, let attention = displayedAttention(at: context.date) {
-                    // The beacon's name tag: which project (and question) is asking, hanging
-                    // just below the parked character so there's no hunting through sessions.
-                    // Cycles with `displayedAttention`, and shares its target with the taps.
                     Text(attentionCaption(for: attention))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(Theme.Color.textPrimary)
                         .lineLimit(1)
-                        .truncationMode(.tail)
                         .padding(.horizontal, Theme.Spacing.sm)
                         .padding(.vertical, 3)
                         .background(Color.black.opacity(0.88), in: Capsule())
                         .overlay(Capsule().stroke(Theme.Color.hairline, lineWidth: 1))
-                        .frame(maxWidth: 300)
+                        .fixedSize()
                         .offset(y: 32)
                 }
             }
