@@ -262,7 +262,6 @@ struct IslandView: View {
             t: t,
             travel: notchWidth + 2 * Self.wingWidth - 2 * Self.characterInset - 24,
             dipStart: Self.wingWidth - 34,
-            dipEnd: Self.wingWidth + notchWidth + 2,
             dipDepth: parkedDY
         )
         return (roam.offset, false, roam.flip)
@@ -284,13 +283,13 @@ struct IslandView: View {
     }
 
     /// The idle roam cycle, as a pure function of the shared clock: rest at home (far left,
-    /// beside the token figure) for most of the 16s period, then hop the FULL length of the
-    /// bar — across the left wing, around the outside of the notch (the interior is the
-    /// camera cutout, so passing "through" it means vanishing: it dips below, flips feet-up
-    /// onto the notch's bottom edge, and walks the underside), back up into the right wing
-    /// past the cost figure to the bar's far end, a beat there, then the same trip home.
+    /// beside the token figure — the character's only indoor spot) for most of the 16s
+    /// period, then hop the FULL length of the bar from the outside: across the left wing,
+    /// dip and flip feet-up at the notch's left corner, then stay on the underside the rest
+    /// of the way — under the housing AND under the money section, never inside it — to the
+    /// bar's far end, a beat there, then the same trip home.
     private static func roamOffset(
-        t: Double, travel: CGFloat, dipStart: CGFloat, dipEnd: CGFloat, dipDepth: CGFloat
+        t: Double, travel: CGFloat, dipStart: CGFloat, dipDepth: CGFloat
     ) -> (offset: CGSize, flip: CGFloat) {
         let period = 16.0
         let phase = t.truncatingRemainder(dividingBy: period)
@@ -301,7 +300,7 @@ struct IslandView: View {
             progressAndHop = (0, 0)
         case ..<11.4:  // out: the full bar, around the notch's underside on the way
             progressAndHop = leg((phase - 9.0) / 2.4, hopCount: 4)
-        case ..<12.6:  // a beat at the bar's far end, beside the cost
+        case ..<12.6:  // a beat hanging off the bar's far end
             progressAndHop = (1, 0)
         case ..<15.0:  // home: the same trip back to the token figure
             let (x, y) = leg((phase - 12.6) / 2.4, hopCount: 4)
@@ -311,12 +310,10 @@ struct IslandView: View {
         }
 
         let dx = travel * progressAndHop.x
-        // 0 in the wings -> 1 under the notch, ramped over 18pt around BOTH notch corners —
-        // it climbs back up into the right wing after clearing the housing.
-        let dip = min(
-            min(max((dx - dipStart) / 18, 0), 1),
-            min(max((dipEnd - dx) / 18, 0), 1)
-        )
+        // 0 in the home wing -> 1 from the notch's left corner onward: once it leaves home
+        // it stays on the underside for the whole rest of the bar (the money side is walked
+        // outside only).
+        let dip = min(max((dx - dipStart) / 18, 0), 1)
         // Hops flip with the character: upside down on the notch's underside, a hop moves
         // AWAY from the edge it stands on, not into the housing.
         let dy = dipDepth * dip + progressAndHop.y * (1 - 2 * dip)
