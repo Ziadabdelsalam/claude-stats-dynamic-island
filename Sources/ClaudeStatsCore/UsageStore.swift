@@ -61,6 +61,12 @@ public final class UsageStore {
     /// Latest genuine user prompt per project (D13): "what is this project
     /// currently working on", from `AttentionDetector.latestUserPrompts`.
     public private(set) var currentTaskByProject: [String: String] = [:]
+    /// Recent sessions grouped per project (D14), newest first within each —
+    /// a project can run several sessions at once and the picker shows them.
+    public private(set) var sessionStatusesByProject: [String: [SessionStatus]] = [:]
+    /// Projects with at least one session actively working in the last few
+    /// minutes — the picker's "active now" dot.
+    public private(set) var activeProjectKeys: Set<String> = []
     /// Manual project pin (D9): `nil` means "follow `activeProjectKey`".
     /// Transient — never persisted across launches. Set directly by UI
     /// callers (e.g. the header picker / attention-nudge tap); read
@@ -199,7 +205,8 @@ public final class UsageStore {
             // corpus-wide, T11), so it never meaningfully slows a refresh.
             let attention = attentionDetector.pendingAttention(now: referenceNow)
             let tasks = attentionDetector.latestUserPrompts(now: referenceNow)
-            return RefreshResult(parsed: parsed, pendingAttention: attention, currentTasks: tasks)
+            let sessions = attentionDetector.sessionStatuses(now: referenceNow)
+            return RefreshResult(parsed: parsed, pendingAttention: attention, currentTasks: tasks, sessionStatuses: sessions)
         }.value
 
         for path in result.parsed.removedPaths {
@@ -218,6 +225,13 @@ public final class UsageStore {
 
         pendingAttention = result.pendingAttention
         currentTaskByProject = result.currentTasks
+        sessionStatusesByProject = result.sessionStatuses
+        // "Active now" = actively working within the last 5 minutes; a session
+        // merely sitting finished/waiting keeps its row but not the dot.
+        activeProjectKeys = Set(result.sessionStatuses.compactMap { key, statuses in
+            statuses.contains { $0.state == .working && referenceNow.timeIntervalSince($0.lastActivity) <= 300 }
+                ? key : nil
+        })
         // `allowSettleRescan`: a turn that just finished is quiet-gated by the
         // detector (`turnQuietSeconds`) and there may never be another
         // filesystem event to re-run detection — so every event-driven refresh
@@ -326,6 +340,7 @@ public final class UsageStore {
         var parsed: IncrementalResult
         var pendingAttention: [AttentionState]
         var currentTasks: [String: String]
+        var sessionStatuses: [String: [SessionStatus]]
     }
 
     /// One file's decided work for this round: stat + the incremental-contract

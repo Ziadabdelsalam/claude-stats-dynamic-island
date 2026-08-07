@@ -506,3 +506,55 @@ private let staleTimestamp = "2000-01-01T00:00:00.000Z" // decades before `now`
 
     #expect(AttentionDetector(root: root).latestUserPrompts(now: now) == ["-tmp-proj": "the current task"])
 }
+
+// MARK: - sessionStatuses (D14: per-project session grouping)
+
+/// Three files in one project map to three grouped sessions, newest first,
+/// each classified by its tail: dangling ordinary tool -> working, waiting
+/// tool -> waiting, quiet plain-text tail -> finished.
+@Test func sessionStatusesGroupAndClassifyPerProject() throws {
+    let root = makeTempRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    try writeSession(root: root, projectDir: "-tmp-proj", sessionFile: "working.jsonl", lines: [
+        Fixture.plainUserLine(id: "u1", timestamp: recentTimestamp, sessionId: "sess-work"),
+        Fixture.bashLine(id: "a1", toolUseID: "toolu_1", timestamp: recentTimestamp, sessionId: "sess-work"),
+    ], mtime: now.addingTimeInterval(-30))
+    try writeSession(root: root, projectDir: "-tmp-proj", sessionFile: "waiting.jsonl", lines: [
+        Fixture.askUserQuestionLine(id: "a2", toolUseID: "toolu_2", timestamp: recentTimestamp, sessionId: "sess-wait"),
+    ], mtime: now.addingTimeInterval(-60))
+    try writeSession(root: root, projectDir: "-tmp-proj", sessionFile: "finished.jsonl", lines: [
+        Fixture.plainUserLine(id: "u2", timestamp: recentTimestamp, sessionId: "sess-done"),
+        Fixture.plainAssistantLine(id: "a3", timestamp: recentTimestamp, sessionId: "sess-done"),
+    ], mtime: now.addingTimeInterval(-90))
+
+    let grouped = AttentionDetector(root: root).sessionStatuses(now: now)
+    let sessions = try #require(grouped["-tmp-proj"])
+    #expect(sessions.map(\.sessionId) == ["sess-work", "sess-wait", "sess-done"])
+    #expect(sessions.map(\.state) == [.working, .waiting, .finished])
+    #expect(sessions[0].task == "never mind, stop")
+}
+
+/// A finished-looking tail on a file still being written (younger than the
+/// quiet gate) stays `working` — mid-turn prose, not a finish.
+@Test func sessionStatusFreshPlainTailIsStillWorking() throws {
+    let root = makeTempRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    try writeSession(root: root, projectDir: "-tmp-proj", lines: [
+        Fixture.plainAssistantLine(id: "a1", timestamp: recentTimestamp),
+    ], mtime: now.addingTimeInterval(-3))
+
+    let grouped = AttentionDetector(root: root).sessionStatuses(now: now)
+    #expect(grouped["-tmp-proj"]?.map(\.state) == [.working])
+}
+
+/// Sidechain (subagent) files are not sessions of their own.
+@Test func sessionStatusesSkipSidechainFiles() throws {
+    let root = makeTempRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let sidechain = """
+    {"type":"assistant","uuid":"a1","timestamp":"\(recentTimestamp)","sessionId":"sess-1","isSidechain":true,"message":{"id":"msg_a1","model":"claude-sonnet-5","content":[{"type":"text","text":"subagent"}]}}
+    """
+    try writeSession(root: root, projectDir: "-tmp-proj", lines: [sidechain], mtime: now.addingTimeInterval(-60))
+
+    #expect(AttentionDetector(root: root).sessionStatuses(now: now).isEmpty)
+}

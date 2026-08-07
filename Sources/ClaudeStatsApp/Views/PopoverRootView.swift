@@ -19,6 +19,8 @@ public struct PopoverRootView: View {
     private let isLoading: Bool
     private let lastRefresh: Date?
     private let currentTask: String?
+    private let sessionStatuses: [String: [SessionStatus]]
+    private let activeProjectKeys: Set<String>
     private let selectedProjectKey: String?
     private let onSelectProject: (String?) -> Void
     private let onRefresh: () -> Void
@@ -38,6 +40,8 @@ public struct PopoverRootView: View {
         isLoading: Bool,
         lastRefresh: Date?,
         currentTask: String? = nil,
+        sessionStatuses: [String: [SessionStatus]] = [:],
+        activeProjectKeys: Set<String> = [],
         selectedProjectKey: String?,
         onSelectProject: @escaping (String?) -> Void,
         onRefresh: @escaping () -> Void,
@@ -47,6 +51,8 @@ public struct PopoverRootView: View {
         self.isLoading = isLoading
         self.lastRefresh = lastRefresh
         self.currentTask = currentTask
+        self.sessionStatuses = sessionStatuses
+        self.activeProjectKeys = activeProjectKeys
         self.selectedProjectKey = selectedProjectKey
         self.onSelectProject = onSelectProject
         self.onRefresh = onRefresh
@@ -180,11 +186,28 @@ public struct PopoverRootView: View {
             }
             if let snapshot, !snapshot.byProject.isEmpty {
                 Divider()
+                // D14: each project is a section — the directory name as the
+                // selectable header (orange dot = a session is actively
+                // working right now), its recent sessions grouped beneath,
+                // since one project can run several sessions at once.
                 ForEach(snapshot.byProject) { project in
-                    Button {
-                        onSelectProject(project.projectKey)
-                    } label: {
-                        pickerRow(title: project.displayName, isSelected: pinnedProjectKey == project.projectKey)
+                    Section {
+                        Button {
+                            onSelectProject(project.projectKey)
+                        } label: {
+                            pickerRow(
+                                title: project.displayName,
+                                isSelected: pinnedProjectKey == project.projectKey,
+                                isActive: activeProjectKeys.contains(project.projectKey)
+                            )
+                        }
+                        ForEach(sessionStatuses[project.projectKey] ?? []) { session in
+                            Button {
+                                onSelectProject(project.projectKey)
+                            } label: {
+                                Label(sessionLine(session), systemImage: sessionIcon(session))
+                            }
+                        }
                     }
                 }
             }
@@ -214,12 +237,46 @@ public struct PopoverRootView: View {
     }
 
     @ViewBuilder
-    private func pickerRow(title: String, isSelected: Bool) -> some View {
+    private func pickerRow(title: String, isSelected: Bool, isActive: Bool = false) -> some View {
+        // Menus render Label icons; the orange "active now" dot rides as the
+        // icon slot when the row isn't the checked one (checkmark wins —
+        // selection must stay visible).
         if isSelected {
             Label(title, systemImage: "checkmark")
+        } else if isActive {
+            Label {
+                Text(title)
+            } icon: {
+                Image(systemName: "circle.fill")
+                    .resizable()
+                    .frame(width: 7, height: 7)
+                    .foregroundStyle(Theme.Color.accent)
+            }
         } else {
             Text(title)
         }
+    }
+
+    /// One grouped session row: its current task (or short session id) plus
+    /// how recently it was active.
+    private func sessionLine(_ session: SessionStatus) -> String {
+        let name = session.task.map { String($0.prefix(36)) } ?? String(session.sessionId.prefix(8))
+        return "\(name) \u{00B7} \(relativeActivity(session.lastActivity))"
+    }
+
+    private func sessionIcon(_ session: SessionStatus) -> String {
+        switch session.state {
+        case .working: "circle.fill"
+        case .waiting: "questionmark.circle.fill"
+        case .finished: "checkmark.circle"
+        }
+    }
+
+    private func relativeActivity(_ date: Date) -> String {
+        let seconds = max(0, Date().timeIntervalSince(date))
+        if seconds < 60 { return "now" }
+        if seconds < 3600 { return "\(Int(seconds / 60))m" }
+        return "\(Int(seconds / 3600))h"
     }
 
     // MARK: - Footer

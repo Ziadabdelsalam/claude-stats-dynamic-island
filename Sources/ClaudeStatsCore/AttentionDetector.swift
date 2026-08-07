@@ -16,6 +16,29 @@ public struct AttentionState: Sendable, Equatable, Identifiable {
     public var id: String
 }
 
+/// One live session's tail-derived status (D14): a project can run several
+/// sessions at once, and the project picker groups them under their project.
+public struct SessionStatus: Sendable, Equatable, Identifiable {
+    public enum State: String, Sendable {
+        /// Mid-turn: tools running, text streaming, or a permission prompt.
+        case working
+        /// Parked on a waiting-set tool (`AskUserQuestion` / `ExitPlanMode`).
+        case waiting
+        /// Turn completed — Claude stopped and is waiting for the user.
+        case finished
+    }
+
+    public var projectKey: String
+    public var sessionId: String
+    public var filePath: String
+    public var state: State
+    /// The session's current task: its latest genuine user prompt.
+    public var task: String?
+    /// The transcript file's mtime.
+    public var lastActivity: Date
+    public var id: String { filePath }
+}
+
 /// Detects sessions waiting on user input by reading only the tail of each
 /// transcript file — never a full re-parse (D10).
 ///
@@ -150,6 +173,121 @@ public struct AttentionDetector: Sendable {
         // across runs (dictionary iteration order and `sorted` are both
         // unordered/unstable) — consumers diff this array.
         return winners.values.sorted { $0.since == $1.since ? $0.id < $1.id : $0.since > $1.since }
+    }
+
+    // MARK: - Session statuses (D14: sessions grouped per project)
+
+    /// Every recent session, grouped by project and sorted most-recent
+    /// first within each — the data behind the picker's project/session
+    /// tree. Same enumeration, staleness pre-filter and tail discipline as
+    /// `pendingAttention`; sidechain (subagent) files are skipped, and a
+    /// session mirrored under two project dirs is deduped to the
+    /// lexicographically smallest `projectKey`, matching `pendingAttention`.
+    public func sessionStatuses(now: Date) -> [String: [SessionStatus]] {
+        let staleWindow = TimeInterval(staleAfterMinutes * 60)
+        var bySession: [String: SessionStatus] = [:] // sessionId -> winner
+
+        for url in TranscriptParser.enumerateTranscriptFiles(under: root) {
+            guard let mtime = Self.modificationDate(atPath: url.path) else { continue }
+            guard now.timeIntervalSince(mtime) <= staleWindow else { continue }
+
+            let projectKey = Self.projectKey(for: url, root: root)
+            let quiet = now.timeIntervalSince(mtime) >= TimeInterval(turnQuietSeconds)
+            guard var status = Self.scanTailForStatus(
+                of: url, tailBytes: tailBytes, waitingToolNames: waitingToolNames, quiet: quiet
+            ) else { continue }
+            status.projectKey = projectKey
+            status.filePath = url.path
+            status.lastActivity = mtime
+            if status.sessionId.isEmpty {
+                status.sessionId = url.deletingPathExtension().lastPathComponent
+            }
+
+            if let existing = bySession[status.sessionId], existing.projectKey <= projectKey {
+                continue
+            }
+            bySession[status.sessionId] = status
+        }
+
+        var grouped: [String: [SessionStatus]] = [:]
+        for status in bySession.values {
+            grouped[status.projectKey, default: []].append(status)
+        }
+        for key in grouped.keys {
+            grouped[key]?.sort {
+                $0.lastActivity == $1.lastActivity
+                    ? $0.sessionId < $1.sessionId
+                    : $0.lastActivity > $1.lastActivity
+            }
+        }
+        return grouped
+    }
+
+    /// Classifies one file's tail. Same walk as `scanTail`, folded to a
+    /// single status: a still-open waiting tool wins; else a quiet plain-text
+    /// assistant tail is a finished turn; else the session is working
+    /// (running tools, streaming, or a permission prompt — T11:
+    /// indistinguishable from running, so never guessed at). Returns `nil`
+    /// for sidechain files.
+    private static func scanTailForStatus(
+        of url: URL, tailBytes: Int, waitingToolNames: Set<String>, quiet: Bool
+    ) -> SessionStatus? {
+        var open: [String: String?] = [:] // waiting tool_use id -> prompt
+        var openMessageId: String?
+        var sessionId = ""
+        var lastTurnEndedPlain = false
+        var task: String?
+        var sawConversation = false
+
+        for lineData in tailLines(of: url, tailBytes: tailBytes) {
+            guard !lineData.isEmpty, let parsed = try? decoder.decode(TailLine.self, from: lineData) else {
+                continue
+            }
+            if parsed.isSidechain == true { return nil }
+            if let sid = parsed.sessionId { sessionId = sid }
+
+            switch parsed.type {
+            case "assistant":
+                sawConversation = true
+                let lineMessageId = parsed.message?.id
+                if openMessageId == nil || openMessageId != lineMessageId {
+                    open.removeAll() // same E19 same-message.id sibling rule as scanTail
+                }
+                let content = parsed.message?.content
+                let hasToolUse = content?.blocks.contains { $0.type == "tool_use" } ?? false
+                lastTurnEndedPlain = !hasToolUse
+                for block in content?.blocks ?? [] where block.type == "tool_use" {
+                    guard let name = block.name, waitingToolNames.contains(name), let toolID = block.id else { continue }
+                    open[toolID] = prompt(forTool: name, input: block.input)
+                    openMessageId = lineMessageId
+                }
+            case "user":
+                sawConversation = true
+                open.removeAll()
+                openMessageId = nil
+                lastTurnEndedPlain = false
+                if let snippet = parsed.message?.content?.textSnippet,
+                   !snippet.hasPrefix("<"), !snippet.hasPrefix("Caveat:"), !snippet.hasPrefix("[Request interrupted") {
+                    task = snippet
+                }
+            default:
+                break
+            }
+        }
+        guard sawConversation else { return nil }
+
+        let state: SessionStatus.State
+        if !open.isEmpty {
+            state = .waiting
+        } else if lastTurnEndedPlain && quiet {
+            state = .finished
+        } else {
+            state = .working
+        }
+        return SessionStatus(
+            projectKey: "", sessionId: sessionId, filePath: "",
+            state: state, task: task, lastActivity: .distantPast
+        )
     }
 
     // MARK: - Current task (latest user prompt)

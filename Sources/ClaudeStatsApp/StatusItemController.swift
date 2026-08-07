@@ -174,6 +174,8 @@ private struct RootView: View {
             isLoading: store.isLoading,
             lastRefresh: store.lastRefresh,
             currentTask: store.effectiveCurrentTask,
+            sessionStatuses: store.sessionStatusesByProject,
+            activeProjectKeys: store.activeProjectKeys,
             selectedProjectKey: store.selectedProjectKey,
             onSelectProject: { store.selectedProjectKey = $0 },
             onRefresh: { store.refresh() },
