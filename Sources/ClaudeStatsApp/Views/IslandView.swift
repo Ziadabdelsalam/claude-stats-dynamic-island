@@ -297,23 +297,34 @@ struct IslandView: View {
                 isNudging ? -1 : 1
             )
         }
+        // Same underside rule as the idle stroll (`roamOffset`): the dip and flip key off
+        // horizontal POSITION, not walk progress — the character ducks under the bar right at
+        // the notch's left corner and stays outside from there, never cutting through the
+        // menu bar / notch interior on its way to (or from) the parked spot.
+        let dipStart = Self.wingWidth - 34
+        func walkPose(dx: CGFloat, hopY: Double) -> (CGSize, CGFloat) {
+            let dip = Self.smoothstep((dx - dipStart) / 18)
+            let dy = parkedDY * dip + hopY * (1 - 2 * dip)
+            return (CGSize(width: dx, height: dy), Self.flip(dip))
+        }
         if isNudging {
-            // Walk out: three hops toward the notch, sinking below it as it arrives — the
-            // descent and the somersault are both weighted to the end (`p²`) so it drops out
-            // of the notch's bottom edge and lands feet-up.
+            // Walk out: hops toward the notch, ducking under at its left corner and landing
+            // feet-up mid-notch.
             guard let nudgeChangedAt else { return (CGSize(width: centerDX, height: parkedDY), true, -1) }
             let p = min(1, now.timeIntervalSince(nudgeChangedAt) / legDuration)
             let (x, y) = Self.leg(p, hopCount: 4)
-            return (CGSize(width: centerDX * x, height: y + parkedDY * p * p), p >= 1, Self.flip(p * p))
+            let (offset, flip) = walkPose(dx: centerDX * x, hopY: y)
+            return (offset, p >= 1, flip)
         }
         if let nudgeChangedAt {
-            // Nudge just cleared: same three hops, homeward, righting itself on the climb.
+            // Nudge just cleared: the same hops homeward, righting itself as it rounds the
+            // notch's corner back into the wing.
             let elapsed = now.timeIntervalSince(nudgeChangedAt)
             if elapsed < legDuration {
                 let p = elapsed / legDuration
                 let (x, y) = Self.leg(p, hopCount: 4)
-                let back = (1 - p) * (1 - p)
-                return (CGSize(width: centerDX * (1 - x), height: y + parkedDY * back), false, Self.flip(back))
+                let (offset, flip) = walkPose(dx: centerDX * (1 - x), hopY: y)
+                return (offset, false, flip)
             }
         }
         // The stroll only plays while some session is working. A stroll that was already
