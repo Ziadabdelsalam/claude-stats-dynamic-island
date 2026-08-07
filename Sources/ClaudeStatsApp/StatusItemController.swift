@@ -20,6 +20,8 @@ import ClaudeStatsCore
 @MainActor
 final class StatusItemController: NSObject {
     private let store: UsageStore
+    private let planLimits: PlanLimitsStore
+    private let chime: AttentionChime
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private var outsideClickMonitor: Any?
@@ -28,8 +30,10 @@ final class StatusItemController: NSObject {
         ofSize: NSFont.systemFontSize, weight: .regular
     )
 
-    init(store: UsageStore) {
+    init(store: UsageStore, planLimits: PlanLimitsStore, chime: AttentionChime) {
         self.store = store
+        self.planLimits = planLimits
+        self.chime = chime
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.popover = NSPopover()
         super.init()
@@ -38,7 +42,7 @@ final class StatusItemController: NSObject {
         popover.contentSize = NSSize(width: 360, height: 460)
         popover.delegate = self
         popover.contentViewController = NSHostingController(
-            rootView: RootView(store: store, onQuit: { NSApp.terminate(nil) })
+            rootView: RootView(store: store, planLimits: planLimits, chime: chime, onQuit: { NSApp.terminate(nil) })
         )
 
         if let button = statusItem.button {
@@ -187,6 +191,8 @@ extension StatusItemController: NSPopoverDelegate {
 /// automatically, reference-type semantics make that safe here.
 private struct RootView: View {
     let store: UsageStore
+    let planLimits: PlanLimitsStore
+    let chime: AttentionChime
     let onQuit: () -> Void
 
     var body: some View {
@@ -198,8 +204,18 @@ private struct RootView: View {
             sessionStatuses: store.sessionStatusesByProject,
             activeProjectKeys: store.activeProjectKeys,
             selectedProjectKey: store.selectedProjectKey,
+            planLimits: PlanLimitsState(
+                limits: planLimits.limits,
+                errorText: planLimits.errorText,
+                lastFetched: planLimits.lastFetched
+            ),
+            isChimeMuted: chime.isMuted,
+            onToggleChimeMuted: { chime.isMuted.toggle() },
             onSelectProject: { store.selectedProjectKey = $0 },
-            onRefresh: { store.refresh() },
+            onRefresh: {
+                store.refresh()
+                planLimits.refresh()
+            },
             onQuit: onQuit
         )
     }

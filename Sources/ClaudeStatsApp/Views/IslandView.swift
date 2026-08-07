@@ -8,6 +8,8 @@ import ClaudeStatsCore
 /// same "container view reads the store directly" seam `StatusItemController`'s `RootView` uses.
 struct IslandView: View {
     let store: UsageStore
+    let planLimits: PlanLimitsStore
+    let chime: AttentionChime
     let notchWidth: CGFloat
     let menuBarHeight: CGFloat
     let isExpanded: Bool
@@ -355,11 +357,21 @@ struct IslandView: View {
                 isLoading: store.isLoading,
                 lastRefresh: store.lastRefresh,
                 currentTask: store.effectiveCurrentTask,
-            sessionStatuses: store.sessionStatusesByProject,
-            activeProjectKeys: store.activeProjectKeys,
+                sessionStatuses: store.sessionStatusesByProject,
+                activeProjectKeys: store.activeProjectKeys,
                 selectedProjectKey: store.selectedProjectKey,
+                planLimits: PlanLimitsState(
+                    limits: planLimits.limits,
+                    errorText: planLimits.errorText,
+                    lastFetched: planLimits.lastFetched
+                ),
+                isChimeMuted: chime.isMuted,
+                onToggleChimeMuted: { chime.isMuted.toggle() },
                 onSelectProject: { store.selectedProjectKey = $0 },
-                onRefresh: { store.refresh() },
+                onRefresh: {
+                    store.refresh()
+                    planLimits.refresh()
+                },
                 onQuit: onQuit
             )
             // Exactly `PopoverRootView`'s own width — any wider and the popover floats

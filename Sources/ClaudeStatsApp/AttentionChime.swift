@@ -11,10 +11,20 @@ import ClaudeStatsCore
 /// `Canvas` art. The three repeats (with gaps) are baked into the buffer,
 /// so one `play()` is the whole notification.
 @MainActor
+@Observable
 final class AttentionChime {
-    private let store: UsageStore
-    private var wasNudging: Bool
-    private var sound: NSSound?
+    @ObservationIgnored private let store: UsageStore
+    @ObservationIgnored private var wasNudging: Bool
+    @ObservationIgnored private var sound: NSSound?
+
+    /// User-facing mute switch (the popover header's speaker button). Persisted so a
+    /// muted chime stays muted across relaunches; the attention beacons (character walk,
+    /// status-item dot) are visual and keep working regardless.
+    var isMuted: Bool = UserDefaults.standard.bool(forKey: AttentionChime.mutedDefaultsKey) {
+        didSet { UserDefaults.standard.set(isMuted, forKey: Self.mutedDefaultsKey) }
+    }
+
+    private static let mutedDefaultsKey = "attentionChimeMuted"
 
     init(store: UsageStore) {
         self.store = store
@@ -41,7 +51,7 @@ final class AttentionChime {
         defer { wasNudging = nudging }
         // Edge-triggered: chime only when attention appears where there was
         // none — a second session joining an already-lit beacon stays silent.
-        guard nudging, !wasNudging else { return }
+        guard nudging, !wasNudging, !isMuted else { return }
         sound?.stop()
         sound = NSSound(data: Self.chimeWAV)
         sound?.volume = 0.5

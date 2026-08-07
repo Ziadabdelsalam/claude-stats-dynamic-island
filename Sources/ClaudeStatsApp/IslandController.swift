@@ -14,6 +14,8 @@ import ClaudeStatsCore
 @MainActor
 final class IslandController: NSObject {
     private let store: UsageStore
+    private let planLimits: PlanLimitsStore
+    private let chime: AttentionChime
     private let panel: IslandPanel
     private let hostingView: NSHostingView<IslandView>
 
@@ -31,13 +33,16 @@ final class IslandController: NSObject {
         var menuBarHeight: CGFloat
     }
 
-    init(store: UsageStore) {
+    init(store: UsageStore, planLimits: PlanLimitsStore, chime: AttentionChime) {
         self.store = store
+        self.planLimits = planLimits
+        self.chime = chime
         self.panel = IslandPanel()
         // A throwaway first `rootView` — real content is built by `updateContent()` right after
         // `super.init()`, once `self` is fully usable inside the closures below.
         self.hostingView = FirstMouseHostingView(rootView: IslandView(
-            store: store, notchWidth: 0, menuBarHeight: 0, isExpanded: false,
+            store: store, planLimits: planLimits, chime: chime,
+            notchWidth: 0, menuBarHeight: 0, isExpanded: false,
             onExpand: {}, onCollapse: {}, onCharacterTapWhileNudging: { _ in }, onQuit: {}
         ))
         super.init()
@@ -171,6 +176,8 @@ final class IslandController: NSObject {
     private func updateContent() {
         hostingView.rootView = IslandView(
             store: store,
+            planLimits: planLimits,
+            chime: chime,
             notchWidth: geometry?.notchWidth ?? 0,
             menuBarHeight: geometry?.menuBarHeight ?? 0,
             isExpanded: isExpanded,

@@ -22,6 +22,9 @@ public struct PopoverRootView: View {
     private let sessionStatuses: [String: [SessionStatus]]
     private let activeProjectKeys: Set<String>
     private let selectedProjectKey: String?
+    private let planLimits: PlanLimitsState
+    private let isChimeMuted: Bool
+    private let onToggleChimeMuted: () -> Void
     private let onSelectProject: (String?) -> Void
     private let onRefresh: () -> Void
     private let onQuit: () -> Void
@@ -30,6 +33,7 @@ public struct PopoverRootView: View {
         case summary = "Summary"
         case projects = "Projects"
         case models = "Models"
+        case limits = "Limits"
         var id: String { rawValue }
     }
 
@@ -43,6 +47,9 @@ public struct PopoverRootView: View {
         sessionStatuses: [String: [SessionStatus]] = [:],
         activeProjectKeys: Set<String> = [],
         selectedProjectKey: String?,
+        planLimits: PlanLimitsState = PlanLimitsState(),
+        isChimeMuted: Bool = false,
+        onToggleChimeMuted: @escaping () -> Void = {},
         onSelectProject: @escaping (String?) -> Void,
         onRefresh: @escaping () -> Void,
         onQuit: @escaping () -> Void
@@ -54,6 +61,9 @@ public struct PopoverRootView: View {
         self.sessionStatuses = sessionStatuses
         self.activeProjectKeys = activeProjectKeys
         self.selectedProjectKey = selectedProjectKey
+        self.planLimits = planLimits
+        self.isChimeMuted = isChimeMuted
+        self.onToggleChimeMuted = onToggleChimeMuted
         self.onSelectProject = onSelectProject
         self.onRefresh = onRefresh
         self.onQuit = onQuit
@@ -138,6 +148,8 @@ public struct PopoverRootView: View {
             ProjectsView(snapshot: snapshot, selectedProjectKey: pinnedProjectKey, onSelectProject: onSelectProject)
         case .models:
             ModelsView(snapshot: snapshot, selectedProjectKey: pinnedProjectKey)
+        case .limits:
+            LimitsView(state: planLimits)
         }
     }
 
@@ -165,6 +177,12 @@ public struct PopoverRootView: View {
                 .frame(width: 8, height: 8)
             projectPicker
             Spacer(minLength: Theme.Spacing.sm)
+            Button(action: onToggleChimeMuted) {
+                Image(systemName: isChimeMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .foregroundStyle(isChimeMuted ? Theme.Color.textTertiary : Theme.Color.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .help(isChimeMuted ? "Notification chime muted — click to unmute" : "Click to mute the notification chime")
             Button(action: onRefresh) {
                 Image(systemName: "arrow.clockwise")
                     .foregroundStyle(Theme.Color.textSecondary)

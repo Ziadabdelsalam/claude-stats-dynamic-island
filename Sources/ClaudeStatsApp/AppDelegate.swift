@@ -9,17 +9,21 @@ import ClaudeStatsCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = UsageStore()
+    private let planLimitsStore = PlanLimitsStore()
     private var statusItemController: StatusItemController?
     private var islandController: IslandController?
     private var attentionChime: AttentionChime?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Build the UI surfaces (and register their observation of `store`) before the first
-        // load starts, so no state change is missed.
-        statusItemController = StatusItemController(store: store)
-        islandController = IslandController(store: store)
-        attentionChime = AttentionChime(store: store)
+        // load starts, so no state change is missed. The chime exists first because both
+        // surfaces expose its mute toggle.
+        let chime = AttentionChime(store: store)
+        attentionChime = chime
+        statusItemController = StatusItemController(store: store, planLimits: planLimitsStore, chime: chime)
+        islandController = IslandController(store: store, planLimits: planLimitsStore, chime: chime)
         store.start()
+        planLimitsStore.start()
         enableLaunchAtLoginOnFirstRun()
     }
 
