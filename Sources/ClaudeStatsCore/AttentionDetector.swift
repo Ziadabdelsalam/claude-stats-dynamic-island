@@ -97,7 +97,7 @@ public struct AttentionDetector: Sendable {
         staleAfterMinutes: Int = 30,
         tailBytes: Int = 262_144,
         turnQuietSeconds: Int = 10,
-        turnStaleAfterMinutes: Int = 5,
+        turnStaleAfterMinutes: Int = 3,
         turnIgnoredProjectKeySubstrings: [String] = ["claude-mem"]
     ) {
         self.root = root

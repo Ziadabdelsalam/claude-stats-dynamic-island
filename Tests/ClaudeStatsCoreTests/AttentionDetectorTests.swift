@@ -86,6 +86,8 @@ private let now = Date(timeIntervalSince1970: 1_785_000_000) // fixed instant
 // 5 minutes before `now` — comfortably inside the default 30-minute staleness window.
 private let recentTimestamp = ISO8601DateFormatter().string(from: now.addingTimeInterval(-5 * 60))
 private let staleTimestamp = "2000-01-01T00:00:00.000Z" // decades before `now`
+// 2 minutes before `now` — inside the short TurnCompleted window (3 minutes).
+private let freshTimestamp = ISO8601DateFormatter().string(from: now.addingTimeInterval(-2 * 60))
 
 @Test func pendingAskUserQuestionAtTailIsDetected() throws {
     let root = makeTempRoot()
@@ -363,8 +365,8 @@ private let staleTimestamp = "2000-01-01T00:00:00.000Z" // decades before `now`
     let root = makeTempRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     try writeSession(root: root, projectDir: "-tmp-proj", lines: [
-        Fixture.plainUserLine(id: "u1", timestamp: recentTimestamp),
-        Fixture.plainAssistantLine(id: "a1", timestamp: recentTimestamp),
+        Fixture.plainUserLine(id: "u1", timestamp: freshTimestamp),
+        Fixture.plainAssistantLine(id: "a1", timestamp: freshTimestamp),
     ], mtime: now.addingTimeInterval(-60))
 
     let states = AttentionDetector(root: root).pendingAttention(now: now)
@@ -444,7 +446,7 @@ private let staleTimestamp = "2000-01-01T00:00:00.000Z" // decades before `now`
     let root = makeTempRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let stringLine = """
-    {"type":"assistant","uuid":"a1","timestamp":"\(recentTimestamp)","sessionId":"sess-1","message":{"id":"msg_a1","model":"claude-sonnet-5","content":"all done here"}}
+    {"type":"assistant","uuid":"a1","timestamp":"\(freshTimestamp)","sessionId":"sess-1","message":{"id":"msg_a1","model":"claude-sonnet-5","content":"all done here"}}
     """
     try writeSession(root: root, projectDir: "-tmp-proj", lines: [stringLine], mtime: now.addingTimeInterval(-60))
 

@@ -10,12 +10,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = UsageStore()
     private var statusItemController: StatusItemController?
     private var islandController: IslandController?
+    private var attentionChime: AttentionChime?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Build the UI surfaces (and register their observation of `store`) before the first
         // load starts, so no state change is missed.
         statusItemController = StatusItemController(store: store)
         islandController = IslandController(store: store)
+        attentionChime = AttentionChime(store: store)
         store.start()
     }
 }
