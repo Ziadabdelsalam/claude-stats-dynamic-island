@@ -272,6 +272,10 @@ struct IslandView: View {
         .allowsHitTesting(characterState == .nudging)
         .onChange(of: characterState == .nudging) { _, _ in nudgeChangedAt = Date() }
         .onChange(of: anyWorking) { _, working in workStoppedAt = working ? nil : Date() }
+        // Launching (or relaunching) with attention already pending: `onChange` never fires,
+        // so without this the walk has no start time and the character would materialize
+        // parked mid-notch instead of hopping over from home.
+        .onAppear { if characterState == .nudging { nudgeChangedAt = Date() } }
     }
 
     /// Where the character is right now, whether the ripple beacon should show, and its
@@ -283,7 +287,7 @@ struct IslandView: View {
         // character hangs just below it, against transparent screen.
         let centerDX = Self.wingWidth + notchWidth / 2 - 12 - Self.characterInset
         let parkedDY = menuBarHeight / 2 + 12  // home center (mb/2) -> feet at mb, center mb+12
-        let legDuration = 1.4
+        let legDuration = 1.8
         let isNudging = characterState == .nudging
 
         if reduceMotion {
@@ -299,7 +303,7 @@ struct IslandView: View {
             // of the notch's bottom edge and lands feet-up.
             guard let nudgeChangedAt else { return (CGSize(width: centerDX, height: parkedDY), true, -1) }
             let p = min(1, now.timeIntervalSince(nudgeChangedAt) / legDuration)
-            let (x, y) = Self.leg(p, hopCount: 3)
+            let (x, y) = Self.leg(p, hopCount: 4)
             return (CGSize(width: centerDX * x, height: y + parkedDY * p * p), p >= 1, Self.flip(p * p))
         }
         if let nudgeChangedAt {
@@ -307,7 +311,7 @@ struct IslandView: View {
             let elapsed = now.timeIntervalSince(nudgeChangedAt)
             if elapsed < legDuration {
                 let p = elapsed / legDuration
-                let (x, y) = Self.leg(p, hopCount: 3)
+                let (x, y) = Self.leg(p, hopCount: 4)
                 let back = (1 - p) * (1 - p)
                 return (CGSize(width: centerDX * (1 - x), height: y + parkedDY * back), false, Self.flip(back))
             }
