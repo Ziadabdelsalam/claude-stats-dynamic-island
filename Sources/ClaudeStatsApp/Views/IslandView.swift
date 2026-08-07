@@ -260,8 +260,9 @@ struct IslandView: View {
         }
         let roam = Self.roamOffset(
             t: t,
-            travel: notchWidth + Self.wingWidth - Self.characterInset - 24,
+            travel: notchWidth + 2 * Self.wingWidth - 2 * Self.characterInset - 24,
             dipStart: Self.wingWidth - 34,
+            dipEnd: Self.wingWidth + notchWidth + 2,
             dipDepth: parkedDY
         )
         return (roam.offset, false, roam.flip)
@@ -283,13 +284,13 @@ struct IslandView: View {
     }
 
     /// The idle roam cycle, as a pure function of the shared clock: rest at home (far left,
-    /// beside the token figure) for most of the 16s period, then walk the OUTSIDE of the
-    /// notch — the notch interior is the camera cutout, so passing "through" it means
-    /// vanishing; instead, at the notch's left corner the character dips below the bar,
-    /// flips feet-up onto the notch's bottom edge, walks along it to the far corner, hangs
-    /// there a beat, walks back around, rights itself, and settles home by the number.
+    /// beside the token figure) for most of the 16s period, then hop the FULL length of the
+    /// bar — across the left wing, around the outside of the notch (the interior is the
+    /// camera cutout, so passing "through" it means vanishing: it dips below, flips feet-up
+    /// onto the notch's bottom edge, and walks the underside), back up into the right wing
+    /// past the cost figure to the bar's far end, a beat there, then the same trip home.
     private static func roamOffset(
-        t: Double, travel: CGFloat, dipStart: CGFloat, dipDepth: CGFloat
+        t: Double, travel: CGFloat, dipStart: CGFloat, dipEnd: CGFloat, dipDepth: CGFloat
     ) -> (offset: CGSize, flip: CGFloat) {
         let period = 16.0
         let phase = t.truncatingRemainder(dividingBy: period)
@@ -298,20 +299,24 @@ struct IslandView: View {
         switch phase {
         case ..<9.0:
             progressAndHop = (0, 0)
-        case ..<11.0:  // out: hops to the notch corner, then around its underside
-            progressAndHop = leg((phase - 9.0) / 2.0, hopCount: 3)
-        case ..<12.2:  // a beat hanging off the notch's far corner
+        case ..<11.4:  // out: the full bar, around the notch's underside on the way
+            progressAndHop = leg((phase - 9.0) / 2.4, hopCount: 4)
+        case ..<12.6:  // a beat at the bar's far end, beside the cost
             progressAndHop = (1, 0)
-        case ..<14.2:  // home: back around the underside to the token figure
-            let (x, y) = leg((phase - 12.2) / 2.0, hopCount: 3)
+        case ..<15.0:  // home: the same trip back to the token figure
+            let (x, y) = leg((phase - 12.6) / 2.4, hopCount: 4)
             progressAndHop = (1 - x, y)
         default:
             progressAndHop = (0, 0)
         }
 
         let dx = travel * progressAndHop.x
-        // 0 in the wing -> 1 under the notch, ramped over 18pt around the notch's left corner.
-        let dip = min(max((dx - dipStart) / 18, 0), 1)
+        // 0 in the wings -> 1 under the notch, ramped over 18pt around BOTH notch corners —
+        // it climbs back up into the right wing after clearing the housing.
+        let dip = min(
+            min(max((dx - dipStart) / 18, 0), 1),
+            min(max((dipEnd - dx) / 18, 0), 1)
+        )
         // Hops flip with the character: upside down on the notch's underside, a hop moves
         // AWAY from the edge it stands on, not into the housing.
         let dy = dipDepth * dip + progressAndHop.y * (1 - 2 * dip)
