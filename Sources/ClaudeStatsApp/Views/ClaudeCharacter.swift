@@ -29,7 +29,7 @@ public struct ClaudeCharacterView: View {
     }
 
     public var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+        TimelineView(.animation(paused: reduceMotion)) { context in
             Canvas { canvas, size in
                 draw(&canvas, size: size, now: context.date.timeIntervalSinceReferenceDate)
             }

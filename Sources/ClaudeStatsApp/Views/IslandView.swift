@@ -179,7 +179,7 @@ struct IslandView: View {
     /// math off `TimelineView`; only the nudge walk needs a start time (`nudgeChangedAt`).
     /// While nudging the character is tappable (D12) — the tap pins the waiting project.
     private var wanderingCharacter: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+        TimelineView(.animation(paused: reduceMotion)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let motion = characterMotion(now: context.date, t: t)
             ZStack {
@@ -274,12 +274,22 @@ struct IslandView: View {
         return abs(scale) < 0.02 ? (scale < 0 ? -0.02 : 0.02) : scale
     }
 
-    /// One leg of travel as `hopCount` parabolic arcs: returns linear x-progress and the hop's
-    /// upward y-offset. The peak stays within the pill's ~6pt of headroom above the character.
+    /// Hermite smoothstep: zero velocity at both ends, so journeys start and stop gently
+    /// instead of snapping between rest and full speed.
+    private static func smoothstep(_ progress: Double) -> Double {
+        let p = min(max(progress, 0), 1)
+        return p * p * (3 - 2 * p)
+    }
+
+    /// One leg of travel as `hopCount` parabolic arcs: returns EASED x-progress (smoothstep —
+    /// gentle takeoff and landing) and the hop's upward y-offset. The hop cadence is derived
+    /// from the eased progress, so the first and last hops are naturally shorter steps and the
+    /// feet never slide against the horizontal motion. The peak stays within the pill's ~6pt
+    /// of headroom above the character.
     private static func leg(_ progress: Double, hopCount: Int) -> (x: Double, y: Double) {
-        let clamped = min(max(progress, 0), 1)
-        let hopPhase = (clamped * Double(hopCount)).truncatingRemainder(dividingBy: 1)
-        return (clamped, -6.0 * 4 * hopPhase * (1 - hopPhase))
+        let eased = smoothstep(progress)
+        let hopPhase = (eased * Double(hopCount)).truncatingRemainder(dividingBy: 1)
+        return (eased, -6.0 * 4 * hopPhase * (1 - hopPhase))
     }
 
     /// The idle roam cycle, as a pure function of the shared clock: rest at home (far left,
@@ -313,7 +323,7 @@ struct IslandView: View {
         // 0 in the home wing -> 1 from the notch's left corner onward: once it leaves home
         // it stays on the underside for the whole rest of the bar (the money side is walked
         // outside only).
-        let dip = min(max((dx - dipStart) / 18, 0), 1)
+        let dip = smoothstep((dx - dipStart) / 18)
         // Hops flip with the character: upside down on the notch's underside, a hop moves
         // AWAY from the edge it stands on, not into the housing.
         let dy = dipDepth * dip + progressAndHop.y * (1 - 2 * dip)
