@@ -67,6 +67,7 @@ final class StatusItemController: NSObject {
         withObservationTracking {
             _ = store.snapshot
             _ = store.isLoading
+            _ = store.pendingAttention
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.updateTitle()
@@ -78,7 +79,7 @@ final class StatusItemController: NSObject {
 
     private func updateTitle() {
         guard let button = statusItem.button else { return }
-        let text: String
+        var text: String
         if let snapshot = store.snapshot {
             let estimated = !snapshot.estimatedPricingModels.isEmpty
             text = "\(snapshot.today.tokens.total.compactTokens) · \(snapshot.today.cost.currency(estimated: estimated))"
@@ -87,7 +88,19 @@ final class StatusItemController: NSObject {
         } else {
             text = "Claude Stats"
         }
-        button.attributedTitle = NSAttributedString(string: text, attributes: [.font: Self.titleFont])
+        // D11's accent dot, now carrying its answer to "which one?": the waiting project's
+        // name rides along, so the notchless/external-display surface names the session
+        // without opening the popover — the island's caption bubble equivalent.
+        if let attention = store.pendingAttention.first {
+            let name = store.snapshot?.scopedByProject[attention.projectKey]?.displayName
+                ?? attention.projectKey
+            let extra = store.pendingAttention.count > 1 ? " +\(store.pendingAttention.count - 1)" : ""
+            text = "● \(String(name.prefix(18)))\(extra) · \(text)"
+        }
+        let attributes: [NSAttributedString.Key: Any] = store.pendingAttention.isEmpty
+            ? [.font: Self.titleFont]
+            : [.font: Self.titleFont, .foregroundColor: NSColor(Theme.Color.accent)]
+        button.attributedTitle = NSAttributedString(string: text, attributes: attributes)
     }
 
     // MARK: - Click handling

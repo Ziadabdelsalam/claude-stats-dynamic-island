@@ -63,6 +63,34 @@ struct IslandView: View {
         store.pendingAttention.isEmpty ? .idle : .nudging
     }
 
+    /// The stroll is a "Claude is working" tell — gated on the same signal as the picker's
+    /// orange dot. With every session idle the character stays home.
+    private var anyWorking: Bool { !store.activeProjectKeys.isEmpty }
+
+    /// When the last working session went quiet — a stroll already underway at that moment
+    /// still finishes; only the *next* departure is suppressed (no mid-bar teleports).
+    @State private var workStoppedAt: Date?
+
+    /// The attention item the beacon is currently presenting: with several sessions waiting
+    /// it cycles every 3 s, so the caption, the hover-open and the tap all agree on which
+    /// project "the" nudge means at any instant. Reduce Motion pins it to the first.
+    private func displayedAttention(at date: Date) -> AttentionState? {
+        let items = store.pendingAttention
+        guard items.count > 1, !reduceMotion else { return items.first }
+        return items[Int(date.timeIntervalSinceReferenceDate / 3) % items.count]
+    }
+
+    private func attentionCaption(for attention: AttentionState) -> String {
+        let name = store.snapshot?.scopedByProject[attention.projectKey]?.displayName
+            ?? attention.projectKey
+        var text = "\(name) · \(attention.prompt ?? "needs you")"
+        let all = store.pendingAttention
+        if all.count > 1, let index = all.firstIndex(where: { $0.id == attention.id }) {
+            text += " · \(index + 1)/\(all.count)"
+        }
+        return text
+    }
+
     @State private var isHoveringCollapsed = false
     /// Monotonic tokens invalidating any in-flight hover dwell / exit-grace sleep the moment the
     /// pointer state changes again — the Task-based equivalent of cancelling a timer.
@@ -120,7 +148,7 @@ struct IslandView: View {
                 // While the character is parked on its tab asking for attention, hovering in
                 // opens the island already scoped to the waiting project (D12) — the user is
                 // reaching for the beacon, not the generic pill.
-                if let attention = store.pendingAttention.first {
+                if let attention = displayedAttention(at: Date()) {
                     onCharacterTapWhileNudging(attention.projectKey)
                 } else {
                     onExpand()
@@ -167,7 +195,7 @@ struct IslandView: View {
             .contentShape(Rectangle())
             .highPriorityGesture(
                 TapGesture().onEnded {
-                    guard let attention = store.pendingAttention.first else { return }
+                    guard let attention = displayedAttention(at: Date()) else { return }
                     onCharacterTapWhileNudging(attention.projectKey)
                 }
             )
@@ -204,11 +232,27 @@ struct IslandView: View {
                     // bottom edge, standing on it like a ceiling. The flip runs through the
                     // descent, so it somersaults into place (and back on the way home).
                     .scaleEffect(x: 1, y: motion.flip)
+                if motion.ripple, let attention = displayedAttention(at: context.date) {
+                    // The beacon's name tag: which project (and question) is asking, hanging
+                    // just below the parked character so there's no hunting through sessions.
+                    // Cycles with `displayedAttention`, and shares its target with the taps.
+                    Text(attentionCaption(for: attention))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Theme.Color.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.88), in: Capsule())
+                        .overlay(Capsule().stroke(Theme.Color.hairline, lineWidth: 1))
+                        .frame(maxWidth: 300)
+                        .offset(y: 32)
+                }
             }
             .offset(x: motion.offset.width, y: motion.offset.height)
             .contentShape(Rectangle())
             .onTapGesture {
-                guard let attention = store.pendingAttention.first else { return }
+                guard let attention = displayedAttention(at: Date()) else { return }
                 onCharacterTapWhileNudging(attention.projectKey)
             }
         }
@@ -220,6 +264,7 @@ struct IslandView: View {
         // idle, pill taps fall through to `characterSlot`/the pill as before.
         .allowsHitTesting(characterState == .nudging)
         .onChange(of: characterState == .nudging) { _, _ in nudgeChangedAt = Date() }
+        .onChange(of: anyWorking) { _, working in workStoppedAt = working ? nil : Date() }
     }
 
     /// Where the character is right now, whether the ripple beacon should show, and its
@@ -258,6 +303,18 @@ struct IslandView: View {
                 let (x, y) = Self.leg(p, hopCount: 3)
                 let back = (1 - p) * (1 - p)
                 return (CGSize(width: centerDX * (1 - x), height: y + parkedDY * back), false, Self.flip(back))
+            }
+        }
+        // The stroll only plays while some session is working. A stroll that was already
+        // underway when the last session went quiet finishes (the clock math is stateless,
+        // so cutting it off would teleport the character); the next departure never starts.
+        if !anyWorking {
+            let phase = t.truncatingRemainder(dividingBy: 16.0)
+            let inStroll = phase >= 9.0 && phase < 15.0
+            let strollStart = now.addingTimeInterval(-(phase - 9.0))
+            let finishInFlight = inStroll && workStoppedAt.map { $0 > strollStart } ?? false
+            if !finishInFlight {
+                return (.zero, false, 1)
             }
         }
         let roam = Self.roamOffset(
