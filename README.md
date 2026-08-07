@@ -15,7 +15,7 @@ Everything is parsed locally from the JSONL transcripts Claude Code already writ
 - A slim black pill wraps the notch: today's **token total** on the left wing, today's **cost** on the right, sized from the screen's real safe-area geometry (never a hardcoded notch width).
 - **Hover to open** (with a short dwell so a passing pointer doesn't trigger it); move the mouse away and it collapses after a grace period. Clicking outside closes it instantly.
 - The expanded panel shows a summary, per-project and per-model breakdowns, a **plan-limits tab**, a **current-task line** (the first bit of the prompt the scoped project's newest session is working on), and a project picker whose pin also drives the pill's figures.
-- **Limits tab**: your plan's live usage limits — 5-hour session, weekly all-models, and weekly per-model — as percent bars with "resets 2h"-style countdowns, exactly what the Claude Desktop menu bar app shows. Fetched from Anthropic's OAuth usage endpoint every 60 s using your existing Claude Code login (read-only: the token is never refreshed or modified). Bars turn amber at 75 % and red at 90 %.
+- **Limits tab**: your plan's live usage limits — 5-hour session, weekly all-models, and weekly per-model — as percent bars with "resets 2h"-style countdowns, exactly what the Claude Desktop menu bar app shows. Fetched from Anthropic's OAuth usage endpoint hourly (plus the header's Refresh button for an immediate update) using your existing Claude Code login (read-only: the token is never refreshed or modified). Bars turn amber at 75 % and red at 90 %.
 - **Chime mute**: the speaker button in the panel header silences the notification chime (persisted across launches); the visual nudges keep working.
 - The picker groups **concurrent sessions under their project** — each project is a section (orange dot when a session is actively working right now, checkmark on the pinned scope) with its recent sessions beneath it: state icon (working / waiting on you / finished), task snippet, and how recently each was active.
 - All expand/collapse motion runs in a single SwiftUI spring inside one fixed transparent window — no AppKit frame animation fighting it.
@@ -139,7 +139,7 @@ The personality knobs are single constants:
 | Roam cadence | `IslandView.roamOffset` (`16 s` period) |
 | Finished-turn quiet gate & lifetime | `AttentionDetector` (`turnQuietSeconds`, `turnStaleAfterMinutes` — 10 s / 3 min) |
 | Chime melody, repeats, volume | `AttentionChime` |
-| Plan-limits poll interval | `PlanLimitsStore.start` (`60 s`) |
+| Plan-limits poll interval | `PlanLimitsStore.start` (`1 h`) |
 | Limit bar warning thresholds | `LimitsView.fill` (`75 %` / `90 %`) |
 | Question-nudge lifetime | `AttentionDetector.staleAfterMinutes` |
 
